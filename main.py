@@ -152,7 +152,6 @@ def analyze(req: AnalyzeRequest, x_api_key: str | None = None):
                 est_monthly_sales=est_sales,
             )
         )
-
     # Aquí puedes añadir: score final, promedios, barrera de entrada, etc.
     return AnalyzeResponse(
         keyword=req.keyword,
@@ -160,3 +159,12 @@ def analyze(req: AnalyzeRequest, x_api_key: str | None = None):
         competitors=competitors_out,
         notes=notes,
     )
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+def home():
+    return FileResponse("static/index.html")
+``
