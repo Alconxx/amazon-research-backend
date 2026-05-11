@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import os
@@ -7,7 +9,6 @@ import math
 import time
 
 # Opcional: Keepa (si decides usarlo)
-# pip install keepa
 try:
     import keepa
 except Exception:
@@ -27,6 +28,14 @@ app.add_middleware(
 
 API_KEY = os.getenv("API_KEY", "")  # para proteger tu API (simple)
 KEEPA_KEY = os.getenv("KEEPA_KEY", "")
+
+# Monta archivos estáticos (HTML, CSS, JS)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Sirve la web bonita en la raíz "/"
+@app.get("/")
+def home():
+    return FileResponse("static/index.html")
 
 class CompetitorIn(BaseModel):
     asin: str = Field(..., min_length=10, max_length=10)
@@ -51,17 +60,12 @@ class AnalyzeResponse(BaseModel):
     generatedAt: str
     competitors: List[CompetitorOut]
     notes: List[str]
-    # Puedes extender aquí con score final, etc.
 
 def now_iso():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 # --- Estimación ventas desde BSR ---
-# Nota: Amazon no publica fórmula oficial; se usa conversión aproximada dependiente de categoría. [2](https://easyparser.com/blog/amazon-bsr-monthly-sales-estimation)[3](https://sagecalculator.com/amazon-best-sellers-rank-calculator/)
-# Implementamos una curva simple tipo potencia por categoría, configurable.
 DEFAULT_CURVES = {
-    # coeficientes de ejemplo: sales ≈ a * (bsr ** -b)
-    # Ajustables por categoría con datos históricos (ideal con Keepa).
     "default": {"a": 80000, "b": 0.75},
     "Home & Kitchen": {"a": 120000, "b": 0.78},
     "Beauty & Personal Care": {"a": 95000, "b": 0.77},
@@ -74,12 +78,11 @@ def estimate_monthly_sales(bsr: int, category: Optional[str]) -> int:
     c = DEFAULT_CURVES.get(category or "", DEFAULT_CURVES["default"])
     a, b = c["a"], c["b"]
     est = a * (bsr ** (-b))
-    # piso razonable
     return max(0, int(round(est)))
 
 def require_api_key(api_key_header: str | None):
     if not API_KEY:
-        return  # si no configuras API_KEY, queda abierto (no recomendado en prod)
+        return
     if api_key_header != API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
@@ -89,31 +92,22 @@ def keepa_client():
     return keepa.Keepa(KEEPA_KEY)
 
 def fetch_from_keepa(asins: List[str]) -> Dict[str, Dict[str, Any]]:
-    """
-    Devuelve un dict por ASIN con: precio (si disponible), rating, reviews, bsr, category.
-    Keepa provee historial de Sales Rank / rating / review count. [4](https://keepa.com/)[5](https://keepaapi.readthedocs.io/en/latest/index.html)
-    """
     client = keepa_client()
     if client is None:
         return {}
 
-    products = client.query(asins)  # puede devolver lista en el mismo orden
+    products = client.query(asins)
     out = {}
     for p in products:
         asin = p.get("asin")
         if not asin:
             continue
-
-        # Campos típicos de Keepa (pueden variar por marketplace/config):
-        # rating y reviewCount suelen venir en p['stats'] o p['data']; depende del payload.
         stats = p.get("stats", {}) or {}
         out[asin] = {
             "bsr": stats.get("salesRank"),
             "review_count": stats.get("reviewCount"),
             "rating": stats.get("rating"),
-            # category puede venir como nombre si haces mapping; aquí dejamos placeholder
             "category": None,
-            # precio: Keepa maneja arrays históricos; aquí dejamos None si no lo mapeas aún
             "price": None,
         }
     return out
@@ -127,7 +121,7 @@ def analyze(req: AnalyzeRequest, x_api_key: str | None = None):
     require_api_key(x_api_key)
 
     notes = []
-    asins = [c.asin for c in req.competitors][:50]  # límite de seguridad
+    asins = [c.asin for c in req.competitors][:50]
 
     data = fetch_from_keepa(asins)
     if not data:
@@ -152,19 +146,9 @@ def analyze(req: AnalyzeRequest, x_api_key: str | None = None):
                 est_monthly_sales=est_sales,
             )
         )
-    # Aquí puedes añadir: score final, promedios, barrera de entrada, etc.
     return AnalyzeResponse(
         keyword=req.keyword,
         generatedAt=now_iso(),
         competitors=competitors_out,
         notes=notes,
     )
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-@app.get("/")
-def home():
-    return FileResponse("static/index.html")
-``
