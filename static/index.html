@@ -1,1 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Amazon Product Research</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  /static/styles.css
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <h1 id="title">Amazon Product Research</h1>
+      <div class="lang-switch">
+        <button onclick="setLang('en')">EN</button>
+        <button onclick="setLang('es')">ES</button>
+      </div>
+    </div>
 
+    <p id="subtitle">Enter a keyword to analyze Amazon product opportunities.</p>
+
+    <input
+      id="keyword"
+      type="text"
+      placeholder="e.g. spa headbands"
+    />
+
+    <button id="analyzeBtn" onclick="analyze()">Analyze</button>
+
+    <div id="loading" class="hidden">Analyzing…</div>
+
+    <div id="results" class="results hidden"></div>
+  </div>
+
+  /static/app.jsscript>
+</body>
+</html>
